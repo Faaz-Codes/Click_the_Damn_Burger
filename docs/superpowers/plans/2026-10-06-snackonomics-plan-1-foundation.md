@@ -16,6 +16,7 @@
 - Dev tooling has **zero npm dependencies** and requires Node ≥ 18 (authored and verified on Node 24).
 - Sources in `src/` are **numbered plain-script modules**. No `import`, `export`, or `require` statements in any `src/*.js` file. Build order is lexicographic by filename — filename prefixes encode dependency order.
 - Every state mutation goes through an `Actions.*` command. UI code never writes `state`.
+- **`DATA` is declared exactly once, in `src/01_data_core.js`.** Tasks 6, 7, 8 and 10 extend it with `Object.assign(DATA, { … })` or `DATA.x = …`. Re-declaring `const DATA` in a later module is a `SyntaxError` in the concatenated bundle, not a redeclaration.
 - All balance numbers live in `CONFIG`. No costs, rates, or item copy may appear in UI code.
 - Only the 12 palette CSS variables may be used as colours (`--ink --panel --panel-hi --grease --ketchup --mustard --lettuce --soda --cream --mute --gold --purple`).
 - Sprites use integer scaling only (2×, 3×, 4×, 6×) with `image-rendering: pixelated`. No `border-radius`. 2px dark outline on interactive elements. Hard offset shadows, no blur.
@@ -991,12 +992,12 @@ git commit -m "feat(data): boosters, 7 chest tiers with pity, dailies, 115 achie
 
 **Files:**
 - Create: `src/07_validate.js`
-- Modify: `src/exports.json` (append `"validateData"`)
+- Modify: `src/exports.json` (append `"validateTables"`)
 - Test: `test/data-validate.test.js`
 
 **Interfaces:**
 - Consumes: all `DATA` tables from Tasks 5-8
-- Produces `validateData(data = DATA) -> string[]` returning human-readable error strings; **empty array means valid**. `build.js` calls it and fails the build on any non-empty result.
+- Produces `validateTables(data = DATA) -> string[]` returning human-readable error strings; **empty array means valid**. `build.js` calls it and fails the build on any non-empty result.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -1004,31 +1005,31 @@ git commit -m "feat(data): boosters, 7 chest tiers with pity, dailies, 115 achie
 // test/data-validate.test.js
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateData, DATA } from './bundle.mjs';
+import { validateTables, DATA } from './bundle.mjs';
 
 test('the shipped data passes validation', () => {
-  const errors = validateData(DATA);
+  const errors = validateTables(DATA);
   assert.deepEqual(errors, [], `data errors:\n${errors.join('\n')}`);
 });
 
 test('detects duplicate ids', () => {
   const bad = structuredClone(DATA.achievements);
   bad.push({ ...bad[0] });
-  const errs = validateData({ ...DATA, achievements: bad });
+  const errs = validateTables({ ...DATA, achievements: bad });
   assert.ok(errs.some(e => /duplicate id/i.test(e)), 'should flag duplicate achievement id');
 });
 
 test('detects a dangling requires reference', () => {
   const bad = DATA.upgrades.map(u => ({ ...u }));
   bad[0] = { ...bad[0], requires: ['does-not-exist'] };
-  const errs = validateData({ ...DATA, upgrades: bad });
+  const errs = validateTables({ ...DATA, upgrades: bad });
   assert.ok(errs.some(e => /does-not-exist/.test(e)), 'should flag dangling requires');
 });
 
 test('detects an unknown effect type', () => {
   const bad = DATA.upgrades.map(u => ({ ...u }));
   bad[0] = { ...bad[0], effect: { type: 'teleport', value: 1 } };
-  const errs = validateData({ ...DATA, upgrades: bad });
+  const errs = validateTables({ ...DATA, upgrades: bad });
   assert.ok(errs.some(e => /teleport/.test(e)), 'should flag unknown effect type');
 });
 
@@ -1036,7 +1037,7 @@ test('detects non-positive costs and unreachable levelReq', () => {
   const bad = DATA.upgrades.map(u => ({ ...u }));
   bad[0] = { ...bad[0], cost: { currency: 'grease', amount: 0 } };
   bad[1] = { ...bad[1], levelReq: 999 };
-  const errs = validateData({ ...DATA, upgrades: bad });
+  const errs = validateTables({ ...DATA, upgrades: bad });
   assert.ok(errs.some(e => /amount 0|non-positive/.test(e)));
   assert.ok(errs.some(e => /levelReq 999/.test(e)));
 });
@@ -1044,23 +1045,27 @@ test('detects non-positive costs and unreachable levelReq', () => {
 test('detects an achievement referencing a nonexistent currency', () => {
   const bad = DATA.achievements.slice();
   bad[0] = { ...bad[0], requires: { currency: 'ghostbucks' } };
-  const errs = validateData({ ...DATA, achievements: bad });
+  const errs = validateTables({ ...DATA, achievements: bad });
   assert.ok(errs.some(e => /ghostbucks/.test(e)));
 });
 
-test('detects an upgrade requirement loop', () => {
+test('detects an upgrade requirement loop without hanging', () => {
   const bad = DATA.upgrades.map(u => ({ ...u }));
-  const a = bad.find(u => u.tree === 'food');
-  a.requires = [bad.find(u => u.tree === 'food' && u.id !== a.id).id];
-  const errs = validateData({ ...DATA, upgrades: bad });
-  assert.ok(errs.length >= 0); // cycle detection is best-effort; must not hang or throw
+  const food = bad.filter(u => u.tree === 'food');
+  food[0].requires = [food[1].id];
+  food[1].requires = [food[0].id];
+  const started = process.hrtime.bigint();
+  const errs = validateTables({ ...DATA, upgrades: bad });
+  const ms = Number(process.hrtime.bigint() - started) / 1e6;
+  assert.ok(ms < 2000, `validator took ${ms}ms — cycle detection is not terminating`);
+  assert.ok(errs.some(e => /cycle/i.test(e)), 'should report the 2-node requires cycle');
 });
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
 Run: `npm test`
-Expected: FAIL — `validateData` not exported.
+Expected: FAIL — `validateTables` not exported.
 
 - [ ] **Step 3: Implement `src/07_validate.js`**
 
@@ -1068,7 +1073,7 @@ Check, in order: unique ids within every table; every `requires` id exists; ever
 
 - [ ] **Step 4: Wire validation into `build.js`**
 
-After concatenation, run the bundle in a Node context and call `validateData()`; if it returns errors, print them and `process.exit(1)`. Add `npm run validate`.
+After concatenation, run the bundle in a Node context and call `validateTables()`; if it returns errors, print them and `process.exit(1)`. Add `npm run validate`.
 
 - [ ] **Step 5: Run the test to verify it passes**
 
@@ -1099,7 +1104,7 @@ git commit -m "feat(validate): cross-table data validator that fails the build o
   - `checksum(str: string) -> string` — FNV-1a hex
   - `exportSave(state) -> string` — base64 of `{ v, t, c, d }` where `d` is the serialized state and `c` is `checksum(JSON.stringify(d))`
   - `importSave(str) -> { ok, state?, errors: string[], preview?: {level, lifetimeGrease} }` — takes only the string; never throws
-  - `validateLoaded(raw) -> string[]` — structural validation used by both `importSave` and `loadGame`; empty array means valid
+  - `validateSaveBlob(raw) -> string[]` — structural validation used by both `importSave` and `loadGame`; empty array means valid
   - `saveGame(state, store, slot = 'main') -> boolean`
   - `loadGame(store, slot = 'main') -> state`
   - `MIGRATIONS` — registry keyed by the version it upgrades *from*
@@ -1205,6 +1210,38 @@ test('validator rejects wrong types and out-of-range values', () => {
   const out = importSave(exportSave(s));
   assert.equal(out.ok, false);
 });
+
+test('saveGame then loadGame round-trips through a store', () => {
+  const mem = new Map();
+  const store = { getItem: k => (mem.has(k) ? mem.get(k) : null),
+                  setItem: (k, v) => mem.set(k, v), removeItem: k => mem.delete(k) };
+  const s = newState(1000);
+  s.run.foodLevel = 31;
+  s.run.currencies.grease = { m: 9.87, e: 13 };
+  assert.equal(saveGame(s, store), true);
+  const back = loadGame(store);
+  assert.equal(back.run.foodLevel, 31);
+  assert.deepEqual(back.run.currencies.grease, { m: 9.87, e: 13 });
+});
+
+test('loadGame falls back to the backup slot when main is corrupt', () => {
+  const mem = new Map();
+  const store = { getItem: k => (mem.has(k) ? mem.get(k) : null),
+                  setItem: (k, v) => mem.set(k, v), removeItem: k => mem.delete(k) };
+  const good = newState(1000); good.run.foodLevel = 12;
+  saveGame(good, store, 'backup');
+  store.setItem('snackonomics.save.main', '{"v":1,"t":0,"c":"deadbeef","d":{corrupt');
+  const back = loadGame(store);
+  assert.equal(back.run.foodLevel, 12, 'should recover from backup, not crash');
+});
+
+test('loadGame on an entirely empty store yields a fresh state', () => {
+  const mem = new Map();
+  const store = { getItem: k => (mem.has(k) ? mem.get(k) : null),
+                  setItem: (k, v) => mem.set(k, v), removeItem: k => mem.delete(k) };
+  const s = loadGame(store);
+  assert.equal(s.run.foodLevel, 1);
+});
 ```
 
 - [ ] **Step 2: Run the tests to verify they fail**
@@ -1222,7 +1259,7 @@ Serialization: BigNum → `"m|e"` compact string; sets → sorted arrays; on loa
 
 `importSave` order: base64-decode → JSON parse → structural validate (types, ranges, version) → checksum verify → migrate → apply. Return `errors` as an array; **never throw**.
 
-`validateLoaded(raw)` must clamp rather than reject where safe (e.g. `foodLevel` clamped to 1-50, `activeBoosters` filtered to known ids) and reject only where corruption is structural.
+`validateSaveBlob(raw)` must clamp rather than reject where safe (e.g. `foodLevel` clamped to 1-50, `activeBoosters` filtered to known ids) and reject only where corruption is structural.
 
 `MIGRATIONS` registry with the commented example stub from spec §9.
 
