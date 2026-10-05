@@ -1,0 +1,3 @@
+node_modules/
+test/bundle.mjs
+docs/generated-upgrades.md
