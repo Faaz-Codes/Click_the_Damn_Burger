@@ -1,7 +1,8 @@
 const BigNum = {
   norm(m, e) {
     if (m === 0) return { m: 0, e: 0 };
-    let mm = m;
+    let sign = m < 0 ? -1 : 1;
+    let mm = Math.abs(m);
     let ee = e;
     while (mm >= 10) {
       mm /= 10;
@@ -11,7 +12,12 @@ const BigNum = {
       mm *= 10;
       ee -= 1;
     }
-    return { m: mm, e: ee };
+    // Guard against mm becoming >= 10 due to floating point edge cases
+    if (mm >= 10) {
+      mm /= 10;
+      ee += 1;
+    }
+    return { m: sign * mm, e: ee };
   },
 
   fromNumber(n) {
@@ -20,11 +26,7 @@ const BigNum = {
     let val = Math.abs(n);
     let e = Math.floor(Math.log10(val));
     let m = val / Math.pow(10, e);
-    if (sign < 0) {
-      // For non-zero, just normalize magnitude - but BigNum stores sign? 
-      // But brief says just {m,e} normalized; the tests use positive numbers.
-    }
-    let res = BigNum.norm(m, e);
+    let res = BigNum.norm(sign * m, e);
     return res;
   },
 
@@ -121,13 +123,19 @@ const BigNum = {
   },
 
   cmp(a, b) {
-    if (a.m === 0 && b.m === 0) return 0;
-    if (a.m === 0) return -1;
-    if (b.m === 0) return 1;
-    if (a.e > b.e) return 1;
-    if (a.e < b.e) return -1;
-    if (a.m > b.m) return 1;
-    if (a.m < b.m) return -1;
+    const m1 = a.m;
+    const m2 = b.m;
+    if (m1 === 0 && m2 === 0) return 0;
+    if (m1 === 0) return -1 * Math.sign(m2);
+    if (m2 === 0) return Math.sign(m1);
+    if (m1 < 0 && m2 >= 0) return -1;
+    if (m1 >= 0 && m2 < 0) return 1;
+    // Same sign, compare magnitude
+    const sign = m1 < 0 ? -1 : 1;
+    if (a.e > b.e) return sign;
+    if (a.e < b.e) return -sign;
+    if (m1 > m2) return sign;
+    if (m1 < m2) return -sign;
     return 0;
   },
 
@@ -148,7 +156,7 @@ const BigNum = {
   sqrt(a) {
     if (a.m === 0) return { m: 0, e: 0 };
     // sqrt(a.m * 10^e) = sqrt(a.m) * 10^(e/2)
-    return BigNum.norm(Math.sqrt(a.m), a.e / 2);
+    return BigNum.norm(Math.sqrt(Math.abs(a.m)), a.e / 2);
   },
 
   log10(a) {
@@ -158,5 +166,35 @@ const BigNum = {
 
   isZero(a) {
     return a.m === 0;
+  },
+
+  pow(a, n) {
+    if (typeof n !== 'number') n = 0;
+    if (n === 0) return { m: 1, e: 0 };
+    if (a.m === 0) return { m: 0, e: 0 };
+    const x = Math.abs(a.m);
+    const eTotal = a.e;
+    const r = n * (Math.log10(x) + eTotal);
+    // Re-derive from mantissa [1,10): m_exp = 10^frac, e_exp = floor(r)
+    const eExp = Math.floor(r);
+    const frac = r - eExp;
+    let mExp = Math.pow(10, frac);
+    if (mExp >= 10) {
+      mExp = mExp / 10;
+      // eExp adjusted conceptually, but better to renorm
+    }
+    // Use norm to ensure [1,10)
+    let res = BigNum.norm(mExp, eExp);
+    if (res.m >= 10) {
+      res = { m: res.m / 10, e: res.e + 1 };
+    }
+    if (res.m < 1 && res.m > 0) {
+      res = { m: res.m * 10, e: res.e - 1 };
+    }
+    // Handle edge cases from floating point - ensure normalized
+    if (res.m >= 1 && res.m < 10) {
+      // OK
+    }
+    return res;
   }
 };

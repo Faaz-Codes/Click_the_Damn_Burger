@@ -45,3 +45,33 @@ test('div by zero yields Infinity sentinel rather than NaN', () => {
   const r = BigNum.div(BigNum.fromNumber(1), BigNum.fromNumber(0));
   assert.equal(r.e, Number.POSITIVE_INFINITY);
 });
+
+test('pow is correct', () => {
+  const p = BigNum.pow(BigNum.fromNumber(3.1), 49);
+  assert.ok(p.m >= 1 && p.m < 10, `mantissa ${p.m} out of range`);
+  const approx = BigNum.fromNumber(Math.pow(3.1, 49));
+  const relErr = Math.abs(p.m - approx.m) / approx.m;
+  assert.ok(relErr < 1e-10, `relative error ${relErr} should be < 1e-10`);
+  assert.equal(p.e, approx.e);
+});
+
+test('pow edge cases', () => {
+  const p0 = BigNum.pow(BigNum.fromNumber(5), 0);
+  assert.deepEqual(p0, { m: 1, e: 0 });
+  const pz = BigNum.pow(BigNum.fromNumber(0), 5);
+  assert.deepEqual(pz, { m: 0, e: 0 });
+  const pz0 = BigNum.pow(BigNum.fromNumber(0), 0);
+  assert.deepEqual(pz0, { m: 1, e: 0 });
+  const pn = BigNum.pow(BigNum.fromNumber(100), -1);
+  assert.ok(pn.m >= 1 && pn.m < 10);
+  assert.ok(pn.e < 0);
+});
+
+test('fromNumber and cmp handle negatives correctly', () => {
+  assert.deepEqual(BigNum.fromNumber(-5), { m: -5, e: 0 });
+  assert.deepEqual(BigNum.fromNumber(-1234), { m: -1.234, e: 3 });
+  assert.deepEqual(BigNum.fromNumber(-0.5), { m: -5, e: -1 });
+  const s = BigNum.sub(BigNum.fromNumber(1), BigNum.fromNumber(5));
+  assert.equal(BigNum.cmp(s, BigNum.fromNumber(0)), -1);
+  assert.equal(BigNum.cmp(s, BigNum.fromNumber(-4)), 0);
+});
