@@ -22,16 +22,19 @@ test('every suffix boundary renders correctly', () => {
   }
 });
 
-test('scientific notation renders exponents', () => {
+test('scientific notation renders exponents', (t) => {
+  t.after(() => fmt.setNotation('standard'));
   fmt.setNotation('scientific');
   assert.match(fmt.num(BigNum.fromString('1.234e18')), /^1\.234e\+?18$/);
-  fmt.setNotation('standard');
 });
 
-test('engineering notation uses exponents divisible by three', () => {
+test('engineering notation uses exponents divisible by three', (t) => {
+  t.after(() => fmt.setNotation('standard'));
   fmt.setNotation('engineering');
+  // Pins the mantissa too: /e21$/ alone would pass an implementation that
+  // rounded the exponent up but never rescaled the mantissa to match.
+  assert.equal(fmt.num(BigNum.fromString('1.234e20')), '0.123e21');
   assert.match(fmt.num(BigNum.fromString('1.234e20')), /e\+?21$/);
-  fmt.setNotation('standard');
 });
 
 test('CONFIG.SUFFIXES covers to 1e303', () => {
@@ -127,6 +130,14 @@ test('rounding up to a tier boundary does not leak a mantissa of 10 or 1000', ()
   assert.equal(fmt.num(BigNum.fromString('9.99999e5')), '1.00M');
 });
 
+test('decimals are shed before a rounding carry is judged', () => {
+  // The ladder has to run at its own precision for the carry to be seen:
+  // 99,999 keeps the pinned 0-decimal threshold, and 999,600 carries all the
+  // way into the next tier instead of stopping at 1000K.
+  assert.equal(fmt.num(BigNum.fromString('9.9999e4')), '100K');
+  assert.equal(fmt.num(BigNum.fromString('9.996e5')), '1.00M');
+});
+
 test('the top suffix renders its own decade', () => {
   assert.equal(fmt.num(BigNum.fromString('9.99e302')), `999${CONFIG.SUFFIXES[100]}`);
 });
@@ -138,4 +149,62 @@ test('beyond the last suffix standard notation falls back to scientific', () => 
 test('an explicit decimals override is honoured', () => {
   assert.equal(fmt.num(BigNum.fromString('1.54e4'), { decimals: 2 }), '15.40K');
   assert.equal(fmt.num(BigNum.fromString('2.8e6'), { decimals: 0 }), '3M');
+  assert.equal(fmt.num(BigNum.fromString('1e9'), { decimals: 5 }), '1.00000B');
+  // The top of the accepted range is honoured, not clamped.
+  assert.equal(fmt.num(BigNum.fromString('1e9'), { decimals: 6 }), '1.000000B');
+});
+
+test('the rounding guards hold on the explicit decimals path too', () => {
+  // Same two boundaries as the default path, with precision asked for rather
+  // than chosen. Neither may leak a mantissa of 10 or of a whole 1000.
+  assert.equal(fmt.num(BigNum.fromString('9.999e3'), { decimals: 2 }), '10.0K');
+  assert.equal(fmt.num(BigNum.fromString('9.99999e5'), { decimals: 0 }), '1M');
+  assert.equal(fmt.num(BigNum.fromString('9.99999e5'), { decimals: 2 }), '1.00M');
+  // Precision that does not carry the mantissa across a boundary is kept, so
+  // the guards fire on a carry rather than clamping every request.
+  assert.equal(fmt.num(BigNum.fromString('1.54e4'), { decimals: 2 }), '15.40K');
+  assert.equal(fmt.num(BigNum.fromString('999.4e3'), { decimals: 1 }), '999.4K');
+  assert.equal(fmt.num(BigNum.fromString('9.999e3'), { decimals: 3 }), '9.999K');
+});
+
+test('the plain path promotes to a suffix when rounding reaches 1000', () => {
+  // 999.9 rounds to a full 1000, which is a K value, not a plain count.
+  assert.equal(fmt.num(BigNum.fromNumber(999.9)), '1.00K');
+  // The boundary below still holds.
+  assert.equal(fmt.num(BigNum.fromNumber(998)), '998');
+});
+
+test('an unusable decimals request is ignored in favour of the default', (t) => {
+  t.after(() => fmt.setNotation('standard'));
+  // Out of range, non-integral, not finite, or the wrong type: all of these
+  // fall back to the display default rather than throwing or guessing.
+  assert.equal(fmt.num(BigNum.fromString('1.54e4'), { decimals: -1 }), '15.4K');
+  assert.equal(fmt.num(BigNum.fromString('1e9'), { decimals: 7 }), '1.00B');
+  assert.equal(fmt.num(BigNum.fromString('1e9'), { decimals: 21 }), '1.00B');
+  assert.equal(fmt.num(BigNum.fromString('1e9'), { decimals: NaN }), '1.00B');
+  assert.equal(fmt.num(BigNum.fromString('1e9'), { decimals: 1.5 }), '1.00B');
+  assert.equal(fmt.num(BigNum.fromString('1e9'), { decimals: Infinity }), '1.00B');
+  assert.equal(fmt.num(BigNum.fromString('1e9'), { decimals: '2' }), '1.00B');
+  assert.equal(fmt.num(BigNum.fromString('1e9'), { decimals: null }), '1.00B');
+  // Scientific and engineering read the same override, and must not throw either.
+  fmt.setNotation('scientific');
+  assert.equal(fmt.num(BigNum.fromString('1e9'), { decimals: -1 }), '1.000e9');
+  fmt.setNotation('engineering');
+  assert.equal(fmt.num(BigNum.fromString('1.234e20'), { decimals: -1 }), '0.123e21');
+});
+
+test('a value that is not a finite bignum degrades to the unavailable marker', (t) => {
+  t.after(() => fmt.setNotation('standard'));
+  // Guards the formatter against corrupt input; BigNum itself is not at fault
+  // here and these values are written literally so the test does not depend on
+  // how BigNum happens to parse a bad string today.
+  assert.equal(fmt.num({ m: NaN, e: 5 }), '--');
+  assert.equal(fmt.num({ m: NaN, e: NaN }), '--');
+  assert.equal(fmt.num({ m: 1, e: Infinity }), '--');
+  assert.equal(fmt.num({ m: 1, e: -Infinity }), '--');
+  // Scientific and engineering must not print NaN either.
+  fmt.setNotation('scientific');
+  assert.equal(fmt.num({ m: NaN, e: NaN }), '--');
+  fmt.setNotation('engineering');
+  assert.equal(fmt.num({ m: NaN, e: NaN }), '--');
 });

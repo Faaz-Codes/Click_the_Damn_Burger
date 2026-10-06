@@ -205,6 +205,14 @@ const BigNum = {
 const FMT_PLAIN_LIMIT = 1000; // below this a count reads best with no decimals
 const FMT_TIER_ORDERS = 3; // orders of magnitude covered by one SUFFIXES entry
 const FMT_MANTISSA_PLACES = 3; // decimal places shown on a 1..10 mantissa
+const FMT_ROUND_RESOLUTION = 2; // finest resolution the default display rounds at
+const FMT_MIN_PLACES = 0; // smallest opts.decimals that is honoured
+// A scaled mantissa is always in [1,1000), so six decimals is at most nine
+// significant digits and stays inside the precision a double actually carries.
+// Asking for more would print the binary approximation of the value (15.4 would
+// become 15.40000000000000035527), which is a lie rather than a rounding.
+const FMT_MAX_PLACES = 6;
+const FMT_UNAVAILABLE = '--'; // stands in for a value that is not a finite bignum
 
 const fmt = {
   notation: 'standard',
@@ -216,43 +224,87 @@ const fmt = {
   },
 
   // num(bignum, { decimals }) -> display string in the current notation.
+  // opts.decimals is honoured only within [FMT_MIN_PLACES, FMT_MAX_PLACES];
+  // anything else is treated as absent and the display default applies.
   num(a, opts) {
-    const places = opts && typeof opts.decimals === 'number' ? opts.decimals : undefined;
+    const places = fmtPlaces(opts);
     if (!a || BigNum.isZero(a)) return '0';
+    // A corrupt mantissa or exponent has no rendering. Say so rather than
+    // letting NaN and undefined reach the screen.
+    if (!Number.isFinite(a.m) || !Number.isFinite(a.e)) return FMT_UNAVAILABLE;
     const sign = a.m < 0 ? '-' : '';
     const abs = { m: Math.abs(a.m), e: a.e };
-    const magnitude = BigNum.log10(abs);
     if (fmt.notation === 'scientific') return fmtScientific(abs, places, sign);
     if (fmt.notation === 'engineering') return fmtEngineering(abs, places, sign);
-    return fmtStandard(abs, magnitude, places, sign);
+    return fmtStandard(abs, places, sign);
   }
 };
 
+// opts.decimals is a count of decimal places, so only a whole number inside the
+// accepted range is honoured. Everything else is ignored rather than clamped:
+// clamping guesses at intent (-1 is a mistake, not a request for zero decimals,
+// and clamping upward to toFixed's ceiling of 100 would emit a hundred-character
+// label), and ignoring is the policy setNotation already applies to a mode it
+// does not recognise.
+function fmtPlaces(opts) {
+  const requested = opts && opts.decimals;
+  if (typeof requested !== 'number' || !Number.isInteger(requested)) return undefined;
+  if (requested < FMT_MIN_PLACES || requested > FMT_MAX_PLACES) return undefined;
+  return requested;
+}
+
 // Standard: plain integers under 1000, then K/M/B/... with 2-3 significant decimals.
-function fmtStandard(abs, magnitude, places, sign) {
+function fmtStandard(abs, places, sign) {
+  const magnitude = BigNum.log10(abs);
+  let tier;
+  let scaled;
   if (magnitude < Math.log10(FMT_PLAIN_LIMIT)) {
-    return sign + String(Math.round(abs.m * Math.pow(10, abs.e)));
+    const plain = Math.round(abs.m * Math.pow(10, abs.e));
+    if (plain < FMT_PLAIN_LIMIT) return sign + String(plain);
+    // 999.9 rounds up to a whole 1000: that is a K value, not a plain count.
+    tier = 1;
+    scaled = abs.m * Math.pow(10, abs.e - FMT_TIER_ORDERS);
+  } else {
+    tier = Math.floor(magnitude / FMT_TIER_ORDERS);
+    // |m| is in [1,10) and the power lands in [-2,2), so this cannot overflow.
+    scaled = abs.m * Math.pow(10, abs.e - tier * FMT_TIER_ORDERS);
   }
-  let tier = Math.floor(magnitude / FMT_TIER_ORDERS);
-  // |m| is in [1,10) and the power is in [-2,2), so this never overflows.
-  let scaled = abs.m * Math.pow(10, abs.e - tier * FMT_TIER_ORDERS);
-  if (places !== undefined) {
-    if (tier >= CONFIG.SUFFIXES.length) return fmtScientific(abs, places, sign);
-    return sign + scaled.toFixed(places) + CONFIG.SUFFIXES[tier];
+  const before = scaled;
+  if (places === undefined) {
+    // Round at the finest resolution the default display uses, then shed
+    // decimals as the magnitude grows: >= 100 shows none, >= 10 one, else two.
+    scaled = fmtRound(scaled, FMT_ROUND_RESOLUTION);
+    if (scaled >= 100) scaled = fmtRound(scaled, 0);
+    else if (scaled >= 10) scaled = fmtRound(scaled, 1);
+  } else {
+    scaled = fmtRound(scaled, places);
   }
-  // Round at the finest resolution the display ever uses, then shed decimals as
-  // the magnitude grows: >= 100 shows none, >= 10 shows one, otherwise two.
-  scaled = fmtRound(scaled, 2);
-  if (scaled >= 100) scaled = fmtRound(scaled, 0);
-  else if (scaled >= 10) scaled = fmtRound(scaled, 1);
-  // A value that rounds up to a whole 1000 belongs to the next tier, not this one.
+  // A mantissa that rounds up to a whole 1000 belongs to the next tier.
   if (scaled >= FMT_PLAIN_LIMIT) {
     tier += 1;
-    scaled = fmtRound(scaled / FMT_PLAIN_LIMIT, 2);
+    scaled = fmtRound(scaled / FMT_PLAIN_LIMIT, places !== undefined ? places : FMT_ROUND_RESOLUTION);
+  }
+  // Rounding that carried the mantissa across a power of ten (9.999 -> 10.00)
+  // landed in a magnitude that shows fewer decimals than were asked for.
+  if (places !== undefined && fmtDecade(scaled) !== fmtDecade(before)) {
+    places = Math.min(places, fmtDefaultPlaces(scaled));
   }
   if (tier >= CONFIG.SUFFIXES.length) return fmtScientific(abs, places, sign);
-  const decimals = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  const decimals = places !== undefined ? places : fmtDefaultPlaces(scaled);
   return sign + scaled.toFixed(decimals) + CONFIG.SUFFIXES[tier];
+}
+
+// The pinned display rule, by magnitude: 100 or more shows no decimals, 10 or
+// more shows one, anything smaller shows two.
+function fmtDefaultPlaces(scaled) {
+  if (scaled >= 100) return 0;
+  if (scaled >= 10) return 1;
+  return 2;
+}
+
+// Which power of ten a positive value sits in, used to spot a rounding carry.
+function fmtDecade(value) {
+  return Math.floor(Math.log10(value));
 }
 
 // Scientific: normalised mantissa and true exponent, e.g. 1.234e18.
