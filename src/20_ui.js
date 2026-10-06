@@ -2,6 +2,14 @@
 // Every DOM touch lives behind an environment guard so
 // this file can be concatenated into the same bundle the
 // Node tests import without breaking them.
+//
+// Performance contract: the whole DOM is built ONCE.
+// The tick loop and every click only update text / width
+// on cached elements; the shop list is rebuilt only when
+// the active tab changes or a purchase succeeds. Nothing
+// tears down and recreates the burger, tabs, or pills,
+// which is what previously ate clicks mid-press and
+// caused the input lag.
 if (typeof document !== 'undefined' && document.getElementById('app')) {
   (function () {
     'use strict';
@@ -22,90 +30,134 @@ if (typeof document !== 'undefined' && document.getElementById('app')) {
       return fmt.num(cost.amount) + ' ' + cost.currency;
     }
 
-    function foodProgress() {
-      var lv = state.run.foodLevel;
-      var cur = DATA.foodLevels[Math.max(0, lv - 1)];
-      var life = lifeVal(state);
-      return Math.min(1, life / cur.threshold);
-    }
+    // ---- Build the static shell exactly once ------------------------------
+    app.innerHTML = '';
+    app.appendChild(el('h1', null, 'SNACKONOMICS'));
 
-    function collectFoodUpgrades() {
-      return DATA.upgrades.filter(function (u) { return u.tree === 'food'; });
-    }
+    var top = el('div', 'topbar');
+    var greaseEl = el('b', null, '0');
+    var gPill = el('div', 'pill'); gPill.appendChild(greaseEl); gPill.appendChild(el('small', null, 'Grease'));
+    var rateEl = el('b', null, '0/s');
+    var ratePill = el('div', 'pill'); ratePill.appendChild(rateEl); ratePill.appendChild(el('small', null, 'Production'));
+    var clickEl = el('b', null, '0');
+    var clickPill = el('div', 'pill'); clickPill.appendChild(clickEl); clickPill.appendChild(el('small', null, 'Per click'));
+    var lvEl = el('b', null, '1');
+    var lvPill = el('div', 'pill'); lvPill.appendChild(lvEl); lvPill.appendChild(el('small', null, 'Level'));
+    top.appendChild(gPill); top.appendChild(ratePill); top.appendChild(clickPill); top.appendChild(lvPill);
+    app.appendChild(top);
 
-    function render() {
-      app.innerHTML = '';
-      var h1 = el('h1', null, 'SNACKONOMICS');
-      app.appendChild(h1);
+    var stage = el('div', 'stage');
+    var burger = el('div', 'burger', '🍔');
+    stage.appendChild(burger);
+    var foodNameEl = el('div', 'foodname', '');
+    stage.appendChild(foodNameEl);
+    var barwrap = el('div', 'barwrap');
+    var barEl = el('div', 'bar');
+    barwrap.appendChild(barEl);
+    stage.appendChild(barwrap);
+    var lifetimeEl = el('div', 'note', '');
+    stage.appendChild(lifetimeEl);
+    app.appendChild(stage);
 
-      var top = el('div', 'topbar');
-      var gPill = el('div', 'pill', '<b>' + fmt.num(state.run.currencies.grease) + '</b><small>Grease</small>');
-      var ratePill = el('div', 'pill', '<b>' + fmt.num(Sel.greasePerSec(state)) + '/s</b><small>Production</small>');
-      var clickPill = el('div', 'pill', '<b>' + fmt.num(Sel.clickPower(state)) + '</b><small>Per click</small>');
-      var lvPill = el('div', 'pill', '<b>' + state.run.foodLevel + '</b><small>Level</small>');
-      top.appendChild(gPill); top.appendChild(ratePill); top.appendChild(clickPill); top.appendChild(lvPill);
-      app.appendChild(top);
+    var noticeEl = el('div', 'notice', '');
+    app.appendChild(noticeEl);
 
-      var stage = el('div', 'stage');
-      var burger = el('div', 'burger', '🍔');
-      burger.addEventListener('click', function () { click(state, Date.now()); render(); });
-      stage.appendChild(burger);
-      var cur = currentFood(state);
-      stage.appendChild(el('div', 'foodname', 'Lv ' + state.run.foodLevel + ' · ' + (cur ? cur.name : '?')));
-      var barwrap = el('div', 'barwrap');
-      var bar = el('div', 'bar');
-      bar.style.width = (foodProgress() * 100).toFixed(1) + '%';
-      barwrap.appendChild(bar);
-      stage.appendChild(barwrap);
-      stage.appendChild(el('div', 'note', fmt.num(BigNum.fromNumber(lifeVal(state))) + ' lifetime grease / ' + fmt.num(BigNum.fromNumber(cur ? cur.threshold : 0))));
-      app.appendChild(stage);
-
-      var notice = el('div', 'notice', lastNotice);
-      app.appendChild(notice);
-
-      var tabs = el('div', 'tabs');
-      ['food', 'automation', 'employees'].forEach(function (t) {
-        var b = el('div', 'tab' + (activeTab === t ? ' active' : ''), t === 'food' ? 'Food Upgrades' : (t === 'automation' ? 'Automation' : 'Employees'));
-        b.addEventListener('click', function () { activeTab = t; render(); });
-        tabs.appendChild(b);
+    var tabEls = [];
+    var tabs = el('div', 'tabs');
+    ['food', 'automation', 'employees'].forEach(function (t) {
+      var label = t === 'food' ? 'Food Upgrades' : (t === 'automation' ? 'Automation' : 'Employees');
+      var b = el('div', 'tab', label);
+      b.addEventListener('click', function () {
+        if (activeTab === t) return;
+        activeTab = t;
+        updateTabClasses();
+        renderList();
       });
-      app.appendChild(tabs);
+      tabs.appendChild(b);
+      tabEls.push({ t: t, b: b });
+    });
+    app.appendChild(tabs);
 
-      var list = el('div', 'list');
+    var listEl = el('div', 'list');
+    app.appendChild(listEl);
+
+    function updateTabClasses() {
+      tabEls.forEach(function (row) {
+        row.b.className = 'tab' + (activeTab === row.t ? ' active' : '');
+      });
+    }
+
+    function updateCounters() {
+      greaseEl.textContent = fmt.num(state.run.currencies.grease);
+      rateEl.textContent = fmt.num(Sel.greasePerSec(state)) + '/s';
+      clickEl.textContent = fmt.num(Sel.clickPower(state));
+      lvEl.textContent = String(state.run.foodLevel);
+      var cur = currentFood(state);
+      foodNameEl.textContent = 'Lv ' + state.run.foodLevel + ' · ' + (cur ? cur.name : '?');
+      var life = lifeVal(state);
+      barEl.style.width = (Math.min(1, life / (cur ? cur.threshold : 1)) * 100).toFixed(1) + '%';
+      lifetimeEl.textContent = fmt.num(BigNum.fromNumber(life)) + ' lifetime grease / ' + fmt.num(BigNum.fromNumber(cur ? cur.threshold : 0));
+      noticeEl.textContent = lastNotice;
+    }
+
+    function renderList() {
+      listEl.innerHTML = '';
       var items = [];
-      if (activeTab === 'food') items = collectFoodUpgrades().map(function (u) { return { def: u, owned: state.run.upgrades[u.id] ? 1 : 0 }; });
-      else if (activeTab === 'automation') items = DATA.automation.map(function (a) { return { def: a, owned: state.run.automation[a.id] || 0 }; });
-      else items = DATA.employees.map(function (e) { return { def: e, owned: state.run.employees[e.id] || 0 }; });
+      if (activeTab === 'food') {
+        items = DATA.upgrades
+          .filter(function (u) { return u.tree === 'food'; })
+          .map(function (u) { return { def: u, owned: state.run.upgrades[u.id] ? 1 : 0, kind: 'upgrade' }; });
+      } else if (activeTab === 'automation') {
+        items = DATA.automation.map(function (a) {
+          return { def: a, owned: state.run.automation[a.id] || 0, kind: 'automation' };
+        });
+      } else {
+        items = DATA.employees.map(function (e) {
+          return { def: e, owned: state.run.employees[e.id] || 0, kind: 'employee' };
+        });
+      }
 
       items.forEach(function (it) {
-        var rrow = el('div', 'row');
+        var row = el('div', 'row');
         var left = el('div');
         left.appendChild(el('h3', null, it.def.name + (it.owned > 0 ? ' <span class="owned">×' + it.owned + '</span>' : '')));
         left.appendChild(el('div', 'meta', it.def.desc || ''));
-        rrow.appendChild(left);
+        row.appendChild(left);
+
         var cost;
-        if (activeTab === 'food') cost = Sel.costOf(state, 'upgrade', it.def.id, 0);
-        else if (activeTab === 'automation') cost = Sel.costOf(state, 'automation', it.def.id, state.run.automation[it.def.id] || 0);
+        if (it.kind === 'upgrade') cost = Sel.costOf(state, 'upgrade', it.def.id, 0);
+        else if (it.kind === 'automation') cost = Sel.costOf(state, 'automation', it.def.id, state.run.automation[it.def.id] || 0);
         else cost = Sel.costOf(state, 'employee', it.def.id, state.run.employees[it.def.id] || 0);
+
         var btn = el('button', 'buy', fmtCost(cost));
-        btn.disabled = (activeTab === 'food' && state.run.upgrades[it.def.id] === true) || !Sel.canAfford(state, cost);
+        var ownedUpgrade = it.kind === 'upgrade' && state.run.upgrades[it.def.id] === true;
+        btn.disabled = ownedUpgrade || !Sel.canAfford(state, cost);
         btn.addEventListener('click', function () {
           var r;
-          if (activeTab === 'food') r = Actions.buyUpgrade(state, it.def.id);
-          else if (activeTab === 'automation') r = Actions.buyAutomation(state, it.def.id, 1);
+          if (it.kind === 'upgrade') r = Actions.buyUpgrade(state, it.def.id);
+          else if (it.kind === 'automation') r = Actions.buyAutomation(state, it.def.id, 1);
           else r = Actions.buyEmployee(state, it.def.id, 1);
           lastNotice = r.ok ? '' : (r.reason || 'cannot buy');
-          render();
+          updateCounters();
+          renderList();
         });
-        rrow.appendChild(btn);
-        list.appendChild(rrow);
+        row.appendChild(btn);
+        listEl.appendChild(row);
       });
-      app.appendChild(list);
     }
 
-    // The tick loop: advance production and re-render the
-    // numbers. clicks only happen on user input.
-    setInterval(function () { tick(state, Date.now()); render(); }, 150);
-    render();
+    burger.addEventListener('click', function () {
+      click(state, Date.now());
+      updateCounters();
+    });
+
+    setInterval(function () {
+      tick(state, Date.now());
+      updateCounters();
+    }, 150);
+
+    updateTabClasses();
+    renderList();
+    updateCounters();
   })();
 }
