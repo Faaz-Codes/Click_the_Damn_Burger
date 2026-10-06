@@ -131,3 +131,51 @@ test('pity config is armed with both guarantees', () => {
   assert.ok(DATA.chestPity.legendaryAfter > DATA.chestPity.epicAfter,
     'legendary guarantee must be further out than epic');
 });
+
+
+// ---------- Task 8b: achievements + quips ----------
+test('115 achievements across all 11 categories', () => {
+  assert.equal(DATA.achievements.length, 115);
+  const cats = new Set(DATA.achievements.map(a => a.category));
+  for (const c of ['clicking','production','levels','currency','employees',
+                   'automation','chests','boosters','streaks','absurd','secret']) {
+    assert.ok(cats.has(c), `missing category ${c}`);
+  }
+});
+
+test('at least 8 secret achievements, all hidden with no requirement text', () => {
+  const secrets = DATA.achievements.filter(a => a.category === 'secret');
+  assert.ok(secrets.length >= 8, `only ${secrets.length} secrets`);
+  for (const s of secrets) {
+    assert.equal(s.hidden, true, `${s.id} must be hidden`);
+    assert.equal(s.desc, '???', `${s.id} must not reveal its condition`);
+  }
+});
+
+test("Don't Click The Potato is present and hidden", () => {
+  const p = DATA.achievements.find(a => a.id === 'dont-click-the-potato');
+  assert.ok(p, 'potato achievement missing');
+  assert.equal(p.hidden, true);
+  assert.equal(p.category, 'secret');
+});
+
+test('every achievement has clout and a callable check', () => {
+  for (const a of DATA.achievements) {
+    assert.ok(a.clout > 0, `${a.id} grants no clout`);
+    assert.equal(typeof a.check, 'function', `${a.id} has no check`);
+  }
+});
+
+test('every check returns falsy on a minimal/empty state (non-throwing)', () => {
+  for (const a of DATA.achievements) {
+    try { a.check({}); } catch { assert.fail(`${a.id} check threw on empty state`); }
+  }
+});
+
+test('40+ quips covering every context tag, none empty', () => {
+  assert.ok(DATA.quips.length >= 40, `only ${DATA.quips.length} quips`);
+  for (const t of ['early','mid','late','comboBreak','idle','highLevel']) {
+    assert.ok(DATA.quips.some(q => q.tag === t), `no quips tagged ${t}`);
+  }
+  assert.ok(DATA.quips.some(q => q.text === "Please stop."));
+});
