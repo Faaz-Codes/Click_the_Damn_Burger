@@ -198,3 +198,80 @@ const BigNum = {
     return res;
   }
 };
+
+// Display formatting. Every value printed here is read out of CONFIG at call
+// time, never at module-evaluation time: 00_config.js is concatenated first, so
+// by the time these functions run the CONFIG literal exists.
+const FMT_PLAIN_LIMIT = 1000; // below this a count reads best with no decimals
+const FMT_TIER_ORDERS = 3; // orders of magnitude covered by one SUFFIXES entry
+const FMT_MANTISSA_PLACES = 3; // decimal places shown on a 1..10 mantissa
+
+const fmt = {
+  notation: 'standard',
+
+  setNotation(mode) {
+    if (mode === 'standard' || mode === 'scientific' || mode === 'engineering') {
+      fmt.notation = mode;
+    }
+  },
+
+  // num(bignum, { decimals }) -> display string in the current notation.
+  num(a, opts) {
+    const places = opts && typeof opts.decimals === 'number' ? opts.decimals : undefined;
+    if (!a || BigNum.isZero(a)) return '0';
+    const sign = a.m < 0 ? '-' : '';
+    const abs = { m: Math.abs(a.m), e: a.e };
+    const magnitude = BigNum.log10(abs);
+    if (fmt.notation === 'scientific') return fmtScientific(abs, places, sign);
+    if (fmt.notation === 'engineering') return fmtEngineering(abs, places, sign);
+    return fmtStandard(abs, magnitude, places, sign);
+  }
+};
+
+// Standard: plain integers under 1000, then K/M/B/... with 2-3 significant decimals.
+function fmtStandard(abs, magnitude, places, sign) {
+  if (magnitude < Math.log10(FMT_PLAIN_LIMIT)) {
+    return sign + String(Math.round(abs.m * Math.pow(10, abs.e)));
+  }
+  let tier = Math.floor(magnitude / FMT_TIER_ORDERS);
+  // |m| is in [1,10) and the power is in [-2,2), so this never overflows.
+  let scaled = abs.m * Math.pow(10, abs.e - tier * FMT_TIER_ORDERS);
+  if (places !== undefined) {
+    if (tier >= CONFIG.SUFFIXES.length) return fmtScientific(abs, places, sign);
+    return sign + scaled.toFixed(places) + CONFIG.SUFFIXES[tier];
+  }
+  // Round at the finest resolution the display ever uses, then shed decimals as
+  // the magnitude grows: >= 100 shows none, >= 10 shows one, otherwise two.
+  scaled = fmtRound(scaled, 2);
+  if (scaled >= 100) scaled = fmtRound(scaled, 0);
+  else if (scaled >= 10) scaled = fmtRound(scaled, 1);
+  // A value that rounds up to a whole 1000 belongs to the next tier, not this one.
+  if (scaled >= FMT_PLAIN_LIMIT) {
+    tier += 1;
+    scaled = fmtRound(scaled / FMT_PLAIN_LIMIT, 2);
+  }
+  if (tier >= CONFIG.SUFFIXES.length) return fmtScientific(abs, places, sign);
+  const decimals = scaled >= 100 ? 0 : scaled >= 10 ? 1 : 2;
+  return sign + scaled.toFixed(decimals) + CONFIG.SUFFIXES[tier];
+}
+
+// Scientific: normalised mantissa and true exponent, e.g. 1.234e18.
+function fmtScientific(abs, places, sign) {
+  return sign + fmtMantissa(abs, places) + 'e' + abs.e;
+}
+
+// Engineering: exponent rounded up to a multiple of three, e.g. 0.123e21.
+function fmtEngineering(abs, places, sign) {
+  const exponent = Math.ceil(abs.e / FMT_TIER_ORDERS) * FMT_TIER_ORDERS;
+  const rescaled = { m: abs.m * Math.pow(10, abs.e - exponent), e: exponent };
+  return sign + fmtMantissa(rescaled, places) + 'e' + exponent;
+}
+
+function fmtMantissa(abs, places) {
+  return abs.m.toFixed(places !== undefined ? places : FMT_MANTISSA_PLACES);
+}
+
+function fmtRound(value, places) {
+  const factor = Math.pow(10, places);
+  return Math.round(value * factor) / factor;
+}
