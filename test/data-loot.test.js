@@ -40,6 +40,51 @@ test('every currency reward points at a real currency', () => {
   }
 });
 
+test('every booster reward points at a real booster', () => {
+  const ids = new Set(DATA.boosters.map(b => b.id));
+  for (const r of allRewards()) {
+    if (r.kind !== 'booster') continue;
+    assert.ok(ids.has(r.id), `booster reward "${r.id}" is not a real booster`);
+  }
+});
+
+test('every buff reward points at a real buff', () => {
+  const ids = new Set(DATA.buffs.map(b => b.id));
+  for (const r of allRewards()) {
+    if (r.kind !== 'buff') continue;
+    assert.ok(ids.has(r.id), `buff reward "${r.id}" is not a real buff`);
+  }
+});
+
+test('every upgrade reward points at a real upgrade', () => {
+  const ids = new Set(DATA.upgrades.map(u => u.id));
+  for (const r of allRewards()) {
+    if (r.kind !== 'upgrade') continue;
+    assert.ok(ids.has(r.id), `upgrade reward "${r.id}" is not a real upgrade`);
+  }
+});
+
+test('every buff has a valid effect type and a positive duration', () => {
+  const ENUM = ['clickMult','prodMult','critChance','critMult','fryRate','fizzRate','chickenRate','boosterDuration','chestLuck','offlineEff','costReduction','spiceGain','cloutGain','comboDecayResist'];
+  assert.ok(DATA.buffs.length > 0, 'buffs table should not be empty');
+  for (const b of DATA.buffs) {
+    assert.ok(ENUM.includes(b.effect.type), `${b.id} uses unknown effect type "${b.effect.type}"`);
+    assert.ok(b.durationMs > 0, `${b.id} has non-positive duration`);
+    assert.ok(typeof b.desc === 'string' && b.desc.length > 0, `${b.id} missing desc`);
+  }
+});
+
+test('every booster desc honest about its effect (no overpromised multipliers)', () => {
+  // a desc mentioning a multiplier the effect does not carry is a player-facing lie
+  for (const b of DATA.boosters) {
+    const effType = b.effect.type;
+    const claimsMultiplier = /\d+x|2x|doubles?|triples?|boosts.*x|increases/i.test(b.desc);
+    const effectIsMult = ['prodMult','clickMult','fryRate','fizzRate','chickenRate','chestLuck','critChance','offlineEff','boosterDuration'].includes(effType);
+    // if it claims a multiplier, the effect type should be a multiplier/rate, not forceCrit/comboDecayResist
+    if (claimsMultiplier) assert.ok(effectIsMult, `${b.id}: desc overpromises (${b.desc}) vs effect ${effType}`);
+  }
+});
+
 test('every chest tier has a non-empty table with positive weights', () => {
   assert.equal(DATA.chestTables.length, 7);
   for (const t of DATA.chestTables) {

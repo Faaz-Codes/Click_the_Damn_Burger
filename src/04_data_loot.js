@@ -54,7 +54,7 @@ Object.assign(DATA, {
       rarity: 'uncommon',
       durationMs: 90000,
       effect: { type: 'comboDecayResist', value: 1 },
-      desc: 'Doubles click power and resists combo decay for 90 seconds.',
+      desc: 'Resists combo decay for 90 seconds.',
       flavorText: 'Shift just got longer.'
     },
     {
@@ -205,6 +205,15 @@ Object.assign(DATA, {
         { weight: 10, kind: 'buff', id: 'click-mult-large', amount: 1 }
       ]
     }
+  ],
+
+  // temporary buffs awarded via kind:'buff' chest/calendar/milestone rewards.
+  // A kind:'buff' reward resolves into one of these; a missing id would break the chest.
+  buffs: [
+    { id: 'crit-chance-small', name: 'Lucky Crits', desc: 'Adds +15% crit chance for 5 minutes.', effect: { type: 'critChance', value: 0.15 }, durationMs: 300000 },
+    { id: 'prod-mult-medium', name: 'Greased Up', desc: 'Doubles production for 10 minutes.', effect: { type: 'prodMult', value: 2 }, durationMs: 600000 },
+    { id: 'prod-mult-large', name: 'Short Circuit', desc: 'Triples production for 10 minutes.', effect: { type: 'prodMult', value: 3 }, durationMs: 600000 },
+    { id: 'click-mult-large', name: 'Turbo Hands', desc: 'Triples click power for 5 minutes.', effect: { type: 'clickMult', value: 3 }, durationMs: 300000 }
   ],
 
   // pity
