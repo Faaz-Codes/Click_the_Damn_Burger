@@ -17,15 +17,18 @@ test('buyUpgrade respects level req and debits the right currency', () => {
   assert.equal(typeof res.ok, 'boolean');
 });
 
-test('buyEmployee costs fixed grease and increments count', () => {
+test('buyEmployee prices each hire with growth and increments count', () => {
   const s = rich();
-  const imp = DATA.employees[0]; // Intern
+  const imp = DATA.employees[0]; // Intern, base 10, growth ~1.15
   const before = BigNum.toNumber(s.run.currencies.grease);
   const res = buy.buyEmployee(s, imp.id, 3);
   assert.equal(res.ok, true);
   assert.equal(s.run.employees[imp.id], 3);
-  const expected = DATA.employees[0].cost.amount * 3;
-  assert.ok(Math.abs(BigNum.toNumber(s.run.currencies.grease) - (before - expected)) < 1e-9);
+  // base * (1 + g + g^2) for three hires from zero owned
+  const g = imp.growth || 1;
+  const expected = imp.cost.amount * (1 + g + g * g);
+  assert.ok(Math.abs(BigNum.toNumber(s.run.currencies.grease) - (before - expected)) < 1e-6,
+    `expected to pay ${expected}, paid ${before - BigNum.toNumber(s.run.currencies.grease)}`);
 });
 
 test('buyAutomation enforces currency and growth-scaled cost', () => {

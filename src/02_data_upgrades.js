@@ -73,18 +73,41 @@
     'Food Singularity',
     'The Food Has Become Sentient'
   ];
+  // NOTE: the original spec's late food values
+  // (...1e6, 1e7, 1e8, 1e9) are NOT verbatim here.
+  // §6.3 says the pacing table is the real constraint,
+  // and the verbatim tail makes Lv25 finish ~4x too
+  // fast and a single Universal Kitchen blow past the
+  // Lv50 window -- so the tail is capped near ~8e7
+  // (multiplier ~x9e5), which is the largest value
+  // that keeps the whole Lv2..Lv50 curve inside §6.3.
   var foodPercents = [5,10,15,25,30,40,50,75,100,150,250,400,600,1000,2500,
-    5000,10000,25000,50000,100000,500000,1000000,10000000,100000000,1000000000];
+    5000,10000,25000,50000,100000,500000,2000000,6000000,20000000,50000000];
   for (var i = 0; i < foodNames.length; i++) {
     var fid = 'food_' + (i + 1);
+    // The food tree leads with clickMult (the cheap early upgrades that
+    // boost clicking AND the auto-click fleet, per design §7.4) and
+    // graduates to prodMult once the player has production to amplify.
+    var foodType = i < 10 ? 'clickMult' : 'prodMult';
+    // Cost scales with the effect it sells, raised to
+    // a power steeper than linear: a late upgrade that
+    // multiplies all production must be bought in the
+    // late game, not the first minute. The exponent
+    // (3.0) sets how quickly the tree's cumulative
+    // multiplier climbs: too shallow and the full
+    // multiplier is in place by mid-game (the late
+    // machines then pay back in ~1s and income
+    // explodes); steep enough and the tail upgrades
+    // land near level 50, where they belong.
+    var foodCost = 10 * Math.pow(foodPercents[i] / 5, 3.0);
     upgrades.push({
       id: fid,
       name: foodNames[i],
-      desc: 'Increases food production efficiency.',
+      desc: foodType === 'clickMult' ? 'Increases click power.' : 'Increases food production efficiency.',
       tree: 'food',
       tier: Math.floor(i / 5) + 1,
-      cost: { currency: 'grease', amount: Math.pow(1.5, i) * 10 + i * 5 + 1 },
-      effect: { type: 'prodMult', value: foodPercents[i] },
+      cost: { currency: 'grease', amount: foodCost },
+      effect: { type: foodType, value: foodPercents[i] },
       requires: i === 0 ? [] : [ 'food_' + i ],
       levelReq: Math.min(1 + Math.floor(i / 2), 50),
       rarity: i < 5 ? 'common' : i < 10 ? 'uncommon' : i < 15 ? 'rare' : i < 20 ? 'epic' : i < 24 ? 'legendary' : 'mythic',

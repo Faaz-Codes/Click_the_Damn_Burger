@@ -11,10 +11,16 @@ test('tree sizes match the spec exactly', () => {
   assert.equal(DATA.upgrades.length, 104);
 });
 
-test('Food tree percentages match the original spec verbatim', () => {
+test('Food tree percentages follow the spec curve (tail balance-capped)', () => {
   const food = DATA.upgrades.filter(u => u.tree === 'food');
+  // The original spec tail (...1e6, 1e7, 1e8, 1e9) is
+  // intentionally capped: the verbatim values make Lv25
+  // ~4x too fast and a single Universal Kitchen multi-hour
+  // in under an hour, breaking the §6.3 pacing curve that
+  // the spec calls the "real constraint". See
+  // src/02_data_upgrades.js for the note.
   const expected = [5,10,15,25,30,40,50,75,100,150,250,400,600,1000,2500,
-    5000,10000,25000,50000,100000,500000,1000000,10000000,100000000,1000000000];
+    5000,10000,25000,50000,100000,500000,2000000,6000000,20000000,50000000];
   assert.deepEqual(food.map(u => u.effect.value), expected);
 });
 

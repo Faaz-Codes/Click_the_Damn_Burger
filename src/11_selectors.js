@@ -42,11 +42,18 @@ function gather(s) {
     const emp = DATA.employeeById.get(id);
     const count = s.run.employees[id] || 0;
     if (!emp || !emp.effect || count <= 0) continue;
+    // An employee's effect is a flat bonus for owning that
+    // type, applied once. The per-count scaling lives in the
+    // milestone track (CONFIG.MILESTONES.employee), which
+    // already multiplies that worker's flat rate at 25/50/
+    // 100/200 owned. Stacking the effect per hire would let
+    // a few thousand workers multiply the entire economy
+    // without bound, which collapses the pacing curve.
     if (MULT_TYPES.has(emp.effect.type)) {
       perCategory[emp.effect.type] = perCategory[emp.effect.type] || {};
-      perCategory[emp.effect.type].employee = (perCategory[emp.effect.type].employee || 0) + emp.effect.value * count;
+      perCategory[emp.effect.type].employee = (perCategory[emp.effect.type].employee || 0) + emp.effect.value;
     } else if (ADD_TYPES.has(emp.effect.type)) {
-      additive[emp.effect.type] = (additive[emp.effect.type] || 0) + emp.effect.value * count;
+      additive[emp.effect.type] = (additive[emp.effect.type] || 0) + emp.effect.value;
     }
   }
   return { perCategory, additive };
@@ -205,14 +212,16 @@ Sel.fizzPerSec   = function (s) { return BigNum.mul(Sel.greasePerSec(s), big(CON
 Sel.chickenPerSec= function (s) { return BigNum.mul(Sel.greasePerSec(s), big(CONFIG.LINK2 * Sel.chickenRateMult(s))); };
 
 Sel.costOf = function (s, kind, id, count) {
-  // The purchasable count to price: for automation, the cost grows by `growth`
-  // per owned unit; employees are a fixed hire price with a 10x-14x tier jump.
+  // The cost of the next `count` units of a repeatable purchase
+  // (employee or automation), starting from `count` already
+  // owned: baseCost * growth^count. Upgrades are a one-time
+  // fixed price.
   let item;
   if (kind === 'employee') item = DATA.employeeById.get(id);
   else if (kind === 'automation') item = DATA.automationById.get(id);
   else if (kind === 'upgrade') item = DATA.upgradeById.get(id);
   if (!item) return null;
-  if (kind === 'automation') {
+  if (kind === 'employee' || kind === 'automation') {
     const growth = item.growth || 1;
     let cost = BigNum.fromNumber(item.cost.amount);
     for (let i = 0; i < count; i++) cost = BigNum.mul(cost, big(growth));

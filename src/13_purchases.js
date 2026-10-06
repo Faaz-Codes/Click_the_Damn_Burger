@@ -38,13 +38,23 @@ const buy = {
   buyEmployee(s, id, n = 1) {
     const e = DATA.employeeById.get(id);
     if (!e) return { ok: false, reason: `unknown employee "${id}"` };
-    const unit = BigNum.fromNumber(e.cost.amount);
+    // The next n hires cost base * growth^owned * (growth^n - 1)/(growth - 1),
+    // so each additional worker of the same type costs more than the last.
+    const growth = e.growth || 1;
+    const owned = s.run.employees[id] || 0;
+    let unit = BigNum.fromNumber(e.cost.amount);
+    for (let i = 0; i < owned; i++) unit = BigNum.mul(unit, newBig(growth, 0));
     let total = BigNum.fromNumber(0);
-    for (let i = 0; i < n; i++) total = BigNum.add(total, unit);
-    // (Employees are a fixed hire price; milestones ride the employee count.)
-    if (!Sel.canAfford(s, { currency: e.cost.currency, amount: total })) return { ok: false, reason: `not enough ${e.cost.currency}` };
+    let u = unit;
+    for (let i = 0; i < n; i++) {
+      total = BigNum.add(total, u);
+      u = BigNum.mul(u, newBig(growth, 0));
+    }
+    if (!Sel.canAfford(s, { currency: e.cost.currency, amount: total })) {
+      return { ok: false, reason: `not enough ${e.cost.currency}` };
+    }
     s.run.currencies[e.cost.currency] = BigNum.sub(s.run.currencies[e.cost.currency], total);
-    s.run.employees[id] = (s.run.employees[id] || 0) + n;
+    s.run.employees[id] = owned + n;
     return { ok: true, changed: { employee: id, n } };
   },
 

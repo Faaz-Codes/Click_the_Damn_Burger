@@ -60,15 +60,32 @@ Object.assign(DATA, {
     { id: 'automated_restaurant', name: 'Automated Restaurant', group: 'mid', rate: 100000, cost: { currency: 'grease', amount: 41600000000 }, growth: 1.13, icon: 'auto_restaurant', desc: 'Fully automated restaurant yields 100000 clicks per second.', flavorText: 'No employees, no complaints.' },
 
     // late (9)
-    { id: 'food_factory', name: 'Food Factory', group: 'late', rate: 1000000, cost: { currency: 'grease', amount: 332800000000 }, growth: 1.15, icon: 'auto_factory', desc: 'Food factory produces 1e6 clicks per second.', flavorText: 'Mass production at scale.' },
-    { id: 'food_megafactory', name: 'Food Megafactory', group: 'late', rate: 10000000, cost: { currency: 'grease', amount: 2662400000000 }, growth: 1.15, icon: 'auto_megafactory', desc: 'Megafactory generates 1e7 clicks per second.', flavorText: 'So big it has its own weather.' },
-    { id: 'automated_food_city', name: 'Automated Food City', group: 'late', rate: 100000000, cost: { currency: 'grease', amount: 21299200000000 }, growth: 1.14, icon: 'auto_city', desc: 'Automated city produces 1e8 clicks per second.', flavorText: 'An entire city dedicated to food.' },
-    { id: 'food_manufacturing_network', name: 'Food Manufacturing Network', group: 'late', rate: 1000000000, cost: { currency: 'grease', amount: 170393600000000 }, growth: 1.14, icon: 'auto_network', desc: 'Global network yields 1e9 clicks per second.', flavorText: 'Interconnected production.' },
-    { id: 'planetary_food_factory', name: 'Planetary Food Factory', group: 'late', rate: 10000000000, cost: { currency: 'grease', amount: 1363148800000000 }, growth: 1.13, icon: 'auto_planetary', desc: 'Planet-scale factory produces 1e10 clicks per second.', flavorText: 'Terraforms for efficiency.' },
-    { id: 'interplanetary_supply_chain', name: 'Interplanetary Supply Chain', group: 'late', rate: 100000000000, cost: { currency: 'grease', amount: 10905190400000000 }, growth: 1.13, icon: 'auto_interplanetary', desc: 'Interplanetary chain generates 1e11 clicks per second.', flavorText: 'Logistics across the solar system.' },
-    { id: 'galactic_food_network', name: 'Galactic Food Network', group: 'late', rate: 1000000000000, cost: { currency: 'grease', amount: 87241523200000000 }, growth: 1.15, icon: 'auto_galactic', desc: 'Galactic network yields 1e12 clicks per second.', flavorText: 'Food for an entire galaxy.' },
-    { id: 'universal_food_production', name: 'Universal Food Production', group: 'late', rate: 1000000000000000, cost: { currency: 'grease', amount: 697932185600000000 }, growth: 1.15, icon: 'auto_universal', desc: 'Universal production yields 1e15 clicks per second.', flavorText: 'All of creation fed.' },
-    { id: 'omniversal_kitchen', name: 'Omniversal Kitchen', group: 'late', rate: 1e30, cost: { currency: 'grease', amount: 5583457484800000000 }, growth: 1.14, icon: 'auto_omniversal', desc: 'Omniversal kitchen transcends all realities, yielding clicks per second.', flavorText: 'Beyond comprehension.', displayName: '∞' }
+    // Costs are tuned (via the balance simulator,
+    // src/19_balance.js) so the whole pacing curve
+    // lands inside the design's §6.3 table.
+    //
+    // A machine's true payback is cost / (rate *
+    // clickCore * prodMult). The food-tree multiplier
+    // (prodMult) climbs through the mid and late game,
+    // so a cost that looks fine at a low multiplier
+    // collapses to a sub-second payback once the
+    // multiplier is up -- which let a single Universal
+    // Kitchen fund dozens of copies and blow the
+    // curve. These costs are ~7.6x the bare
+    // rate-proportional figures, which keeps each tier
+    // a long-term investment and lands level 50 at
+    // ~9 hours. The late costs scale uniformly so the
+    // payback ladder keeps rising the way it does
+    // through the early and mid tiers.
+    { id: 'food_factory', name: 'Food Factory', group: 'late', rate: 1000000, cost: { currency: 'grease', amount: 3.8e12 }, growth: 1.15, icon: 'auto_factory', desc: 'Food factory produces 1e6 clicks per second.', flavorText: 'Mass production at scale.' },
+    { id: 'food_megafactory', name: 'Food Megafactory', group: 'late', rate: 10000000, cost: { currency: 'grease', amount: 4.94e13 }, growth: 1.15, icon: 'auto_megafactory', desc: 'Megafactory generates 1e7 clicks per second.', flavorText: 'So big it has its own weather.' },
+    { id: 'automated_food_city', name: 'Automated Food City', group: 'late', rate: 100000000, cost: { currency: 'grease', amount: 6.46e14 }, growth: 1.14, icon: 'auto_city', desc: 'Automated city produces 1e8 clicks per second.', flavorText: 'An entire city dedicated to food.' },
+    { id: 'food_manufacturing_network', name: 'Food Manufacturing Network', group: 'late', rate: 1000000000, cost: { currency: 'grease', amount: 8.36e15 }, growth: 1.14, icon: 'auto_network', desc: 'Global network yields 1e9 clicks per second.', flavorText: 'Interconnected production.' },
+    { id: 'planetary_food_factory', name: 'Planetary Food Factory', group: 'late', rate: 10000000000, cost: { currency: 'grease', amount: 1.064e17 }, growth: 1.13, icon: 'auto_planetary', desc: 'Planet-scale factory produces 1e10 clicks per second.', flavorText: 'Terraforms for efficiency.' },
+    { id: 'interplanetary_supply_chain', name: 'Interplanetary Supply Chain', group: 'late', rate: 100000000000, cost: { currency: 'grease', amount: 1.444e18 }, growth: 1.13, icon: 'auto_interplanetary', desc: 'Interplanetary chain generates 1e11 clicks per second.', flavorText: 'Logistics across the solar system.' },
+    { id: 'galactic_food_network', name: 'Galactic Food Network', group: 'late', rate: 1000000000000, cost: { currency: 'grease', amount: 1.9e19 }, growth: 1.15, icon: 'auto_galactic', desc: 'Galactic network yields 1e12 clicks per second.', flavorText: 'Food for an entire galaxy.' },
+    { id: 'universal_food_production', name: 'Universal Food Production', group: 'late', rate: 1000000000000000, cost: { currency: 'grease', amount: 3.8e22 }, growth: 1.15, icon: 'auto_universal', desc: 'Universal production yields 1e15 clicks per second.', flavorText: 'All of creation fed.' },
+    { id: 'omniversal_kitchen', name: 'Omniversal Kitchen', group: 'late', rate: 1e30, cost: { currency: 'grease', amount: 7.6e37 }, growth: 1.14, icon: 'auto_omniversal', desc: 'Omniversal kitchen transcends all realities, yielding clicks per second.', flavorText: 'Beyond comprehension.', displayName: '∞' }
   ]
 });
 
@@ -76,3 +93,15 @@ Object.assign(DATA, {
   employeeById: new Map(DATA.employees.map(e => [e.id, e])),
   automationById: new Map(DATA.automation.map(a => [a.id, a]))
 });
+
+// Employees scale in cost per hire, exactly like automation --
+// a repeatable purchase whose price never rises would let a
+// player buy unbounded quantities and break the economy.
+// Growth eases slightly for the pricier tiers so they stay
+// buyable as the run progresses.
+Object.assign(DATA, {
+  employeeGrowth: { 1: 1.15, 2: 1.14, 3: 1.13, 4: 1.12, 5: 1.11, 6: 1.10 }
+});
+for (const emp of DATA.employees) {
+  emp.growth = DATA.employeeGrowth[emp.tier] || 1.13;
+}
