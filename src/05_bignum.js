@@ -30,18 +30,43 @@ const BigNum = {
     return res;
   },
 
+  // Accepted input, tried in this order:
+  //   "m|e"        compact save form, e.g. "-1.234|3"
+  //   "1.234e18"   scientific notation; "E" and a leading "+" are allowed
+  //   "1234", "1.234", "0.5", ".5"   ordinary decimal text, signed either way
+  // Input that carries no number at all ("" or "abc") reports zero, and so does
+  // a compact pair that is not two numeric halves. The reason is the save path:
+  // fromString parses saved currencies, and the save validator rejects a NaN
+  // mantissa outright, so a poisoned pair costs the player their session. A zero
+  // is at least visible and recoverable, and it matches this method's own policy
+  // for a non-string -- zero, not an exception -- so fromString never throws and
+  // a corrupt field cannot take the boot path down with it. Signed zero ("-0",
+  // "-0.0") is the same zero: norm collapses any m === 0 to { m: 0, e: 0 }.
   fromString(s) {
     if (typeof s !== 'string') return { m: 0, e: 0 };
     s = s.trim();
     if (s === '0' || s === '0.0') return { m: 0, e: 0 };
+    // Compact save form: a normalised mantissa and its exponent. Each half must
+    // be a plain decimal -- the format never nests an exponent inside either
+    // one -- so "1e5|3" is a file that is not in the format and is read as the
+    // corrupt field it is, not as 1e5 times 10^3. The exponent half keeps its
+    // decimal point so a sqrt result, whose exponent can be a half, survives.
+    if (s.includes('|')) {
+      const plain = /^[+-]?(\d+(\.\d*)?|\.\d+)$/;
+      const halves = s.split('|');
+      if (halves.length !== 2 || !plain.test(halves[0]) || !plain.test(halves[1])) return { m: 0, e: 0 };
+      return BigNum.norm(Number(halves[0]), Number(halves[1]));
+    }
     // Handle scientific notation
     if (s.includes('e') || s.includes('E')) {
       const [mantStr, expStr] = s.split(/[eE]/);
       const exp = parseInt(expStr, 10);
       const parsed = BigNum.parseMantissa(mantStr);
+      if (!Number.isFinite(exp) || !Number.isFinite(parsed.m) || !Number.isFinite(parsed.e)) return { m: 0, e: 0 };
       return BigNum.norm(parsed.m, parsed.e + exp);
     }
     const parsed = BigNum.parseMantissa(s);
+    if (!Number.isFinite(parsed.m) || !Number.isFinite(parsed.e)) return { m: 0, e: 0 };
     return BigNum.norm(parsed.m, parsed.e);
   },
 
@@ -53,8 +78,14 @@ const BigNum = {
       const fracStr = fracPart;
       const fracVal = fracStr.length === 0 ? 0 : parseInt(fracStr, 10);
       if (intVal === 0) {
-        const m = fracVal / Math.pow(10, fracStr.length);
+        // "0.5", ".5", "-0.5": the integer part contributes nothing, so the
+        // digits after the point are the whole number and the point only sets
+        // the exponent. Dividing the mantissa by that same power of ten as well
+        // counted it twice, which is why "0.5" used to read as 0.05.
+        // intVal has already thrown the sign away (parseInt reads "-0" as zero),
+        // so the sign is recovered from the text.
         const e = -fracStr.length;
+        const m = intPart.charAt(0) === '-' ? -fracVal : fracVal;
         return { m, e };
       }
       const totalStr = intPart + fracPart;
@@ -74,8 +105,13 @@ const BigNum = {
     } else {
       const num = parseInt(s, 10);
       if (num === 0) return { m: 0, e: 0 };
-      const e = Math.floor(Math.log10(num));
-      const m = num / Math.pow(10, e);
+      // log10 of a negative is NaN, which would poison the exponent and the
+      // mantissa with it. Take the magnitude, then put the sign back on the
+      // mantissa; for a positive num this is the same arithmetic as before.
+      const sign = num < 0 ? -1 : 1;
+      const abs = Math.abs(num);
+      const e = Math.floor(Math.log10(abs));
+      const m = sign * (abs / Math.pow(10, e));
       return { m, e };
     }
   },
