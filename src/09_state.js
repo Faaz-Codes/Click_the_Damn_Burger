@@ -107,9 +107,7 @@ function newState(now = Date.now()) {
       culinaryCredits: 0,
       prestigeUpgrades: {},
       achievements: {},
-      chestPity: {
-        tier1: 0, tier2: 0, tier3: 0, tier4: 0, tier5: 0, tier6: 0, tier7: 0,
-      },
+      chestPity: { noEpic: 0, noLegendary: 0 },
       daily: { lastClaimDate: null, streakCount: 0 },
       streak: { count: 0, best: 0 },
       boosterInventory: {},
