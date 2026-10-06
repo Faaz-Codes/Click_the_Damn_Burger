@@ -54,8 +54,10 @@ function writeOutput(path, text) {
 const body = concatSources();
 const exportNames = JSON.parse(readFileSync(join(SRC, 'exports.json'), 'utf8'));
 const bundle = `${body}\nexport { ${exportNames.join(', ')} };\n`;
+let styleText = '';
+try { styleText = readFileSync(join(SRC, 'style.css'), 'utf8'); } catch { /* no style.css yet */ }
 const html = fillMarker(
-  fillMarker(readFileSync(join(SRC, 'index.shell.html'), 'utf8'), STYLE_MARKER, ''),
+  fillMarker(readFileSync(join(SRC, 'index.shell.html'), 'utf8'), STYLE_MARKER, styleText),
   SCRIPT_MARKER,
   `(() => {\n'use strict';\n${body}})();`,
 );

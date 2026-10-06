@@ -1,0 +1,83 @@
+/* SNACKONOMICS retro-pixel shell */
+:root {
+  --bg: #171320;
+  --panel: #241d33;
+  --panel2: #2e2542;
+  --ink: #f4e9d8;
+  --dim: #a99bc4;
+  --accent: #ffb02e;
+  --accent2: #ff5d3a;
+  --good: #7ed957;
+  --line: #4a3f63;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: 'VT323', 'Courier New', monospace;
+  font-size: 20px;
+  line-height: 1.25;
+  min-height: 100vh;
+  display: flex;
+  justify-content: center;
+}
+#app { width: 100%; max-width: 920px; padding: 14px; }
+h1 {
+  font-family: 'Press Start 2P', monospace;
+  font-size: 18px;
+  color: var(--accent);
+  text-shadow: 3px 3px 0 var(--accent2);
+  margin: 4px 0 14px;
+}
+.topbar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin-bottom: 12px; }
+.pill {
+  background: var(--panel);
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  padding: 6px 12px;
+}
+.pill b { color: var(--accent); font-size: 24px; }
+.pill small { display: block; color: var(--dim); font-size: 14px; }
+.stage {
+  background: var(--panel);
+  border: 3px solid var(--line);
+  border-radius: 10px;
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 12px;
+}
+.burger {
+  font-size: 80px;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+  display: inline-block;
+  transition: transform .04s;
+}
+.burger:active { transform: scale(.92); }
+.foodname { font-family: 'Press Start 2P', monospace; font-size: 13px; color: var(--ink); margin-top: 8px; }
+.barwrap { height: 14px; background: #120d1e; border: 2px solid var(--line); border-radius: 6px; margin: 8px auto 0; max-width: 420px; overflow: hidden; }
+.bar { height: 100%; background: var(--good); width: 0%; transition: width .15s; }
+.tabs { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+.tab {
+  background: var(--panel2); color: var(--dim); border: 2px solid var(--line);
+  border-radius: 6px 6px 0 0; padding: 6px 14px; cursor: pointer; font-size: 19px;
+}
+.tab.active { color: var(--accent); border-color: var(--accent); }
+.list { display: grid; gap: 8px; }
+.row {
+  background: var(--panel); border: 2px solid var(--line); border-radius: 8px;
+  padding: 8px 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.row h3 { font-size: 21px; }
+.row .meta { color: var(--dim); font-size: 16px; }
+.row .owned { color: var(--accent); font-weight: bold; }
+button.buy {
+  font-family: 'Press Start 2P', monospace; font-size: 10px; cursor: pointer;
+  background: var(--accent); color: #1b1430; border: 0; border-radius: 6px; padding: 9px 12px;
+  white-space: nowrap;
+}
+button.buy:disabled { background: #5a5170; color: #241d33; cursor: not-allowed; }
+.notice { color: var(--accent2); min-height: 22px; }
+.note { color: var(--dim); font-size: 16px; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
