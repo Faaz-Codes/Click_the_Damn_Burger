@@ -66,9 +66,17 @@ function additiveFactor(additive, type) {
   return 1 + (additive[type] || 0) / 100;
 }
 
+function activeBoosters(s) {
+  // A booster counts only until its expiry. The runtime prunes on each
+  // tick (see expireBoosters); this filter is the defensive backstop so
+  // a stale entry can never inflate production between ticks.
+  const now = (s.timestamps && s.timestamps.lastSeen) || 0;
+  return (s.run.activeBoosters || []).filter(b => b.expiresAt === undefined || b.expiresAt > now);
+}
+
 function boosterOfType(s, type) {
   let product = 1;
-  for (const b of s.run.activeBoosters || []) {
+  for (const b of activeBoosters(s)) {
     const def = DATA.boosters.find(x => x.id === b.id);
     if (!def || !def.effect || def.effect.type !== type) continue;
     const v = typeof def.effect.value === 'number' ? def.effect.value : 1;
@@ -103,7 +111,7 @@ const Sel = {
     const out = {};
     for (const t of MULT_TYPES) out[t] = factorOfType(perCategory, t);
     for (const t of ADD_TYPES) out[t] = additiveFactor(additive, t);
-    out.forceCrit = (s.run.activeBoosters || []).some(b => {
+    out.forceCrit = activeBoosters(s).some(b => {
       const d = DATA.boosters.find(x => x.id === b.id);
       return d && d.effect && d.effect.type === 'forceCrit';
     });
