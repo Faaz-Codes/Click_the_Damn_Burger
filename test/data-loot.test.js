@@ -11,12 +11,32 @@ test('7 chest tiers with escalating rarity', () => {
      'Franchise Vault','Anomaly Crate','[REDACTED]']);
 });
 
-test('no chest table awards out-of-scope systems', () => {
-  for (const t of DATA.chestTables) {
-    for (const r of t.entries) {
-      assert.ok(['currency','booster','buff','upgrade'].includes(r.kind),
-        `illegal reward kind "${r.kind}" — pets/cards/cosmetics are out of scope`);
-    }
+// Every reward source (chest tables, daily calendar, streak milestones) may
+// only use these kinds. 'permanent' writes to meta.permanentBonuses (e.g. the
+// Golden Burger's +100% global production) rather than to a currency balance;
+// a later systems layer consumes it.
+const REWARD_KINDS = ['currency','booster','buff','upgrade','permanent'];
+
+function allRewards() {
+  return [
+    ...DATA.chestTables.flatMap(t => t.entries),
+    ...DATA.dailyCalendar.flatMap(d => d.rewards),
+    ...DATA.streakMilestones.flatMap(m => m.rewards)
+  ];
+}
+
+test('no reward table awards out-of-scope systems', () => {
+  for (const r of allRewards()) {
+    assert.ok(REWARD_KINDS.includes(r.kind),
+      `illegal reward kind "${r.kind}" — pets/cards/cosmetics are out of scope`);
+  }
+});
+
+test('every currency reward points at a real currency', () => {
+  const ids = new Set(DATA.currencies.map(c => c.id));
+  for (const r of allRewards()) {
+    if (r.kind !== 'currency') continue;
+    assert.ok(ids.has(r.id), `currency reward "${r.id}" is not a real currency`);
   }
 });
 
@@ -53,6 +73,12 @@ test('Day 30 grants the permanent Golden Burger', () => {
   const d30 = DATA.dailyCalendar.find(d => d.day === 30);
   assert.ok(d30, 'day 30 must exist');
   assert.deepEqual(d30.rewards.map(r => r.id), ['golden-burger']);
+  const m30 = DATA.streakMilestones.find(m => m.day === 30);
+  assert.ok(m30, 'day 30 milestone must exist');
+  for (const r of [...d30.rewards, ...m30.rewards]) {
+    assert.equal(r.kind, 'permanent',
+      `golden-burger must be kind "permanent" (meta.permanentBonuses), not "${r.kind}"`);
+  }
 });
 
 test('pity config is armed with both guarantees', () => {

@@ -1,4 +1,14 @@
 // Loot data (Task 8a) - boosters, chests, pity, dailies - extend DATA from 01_data_core.js
+//
+// Reward `kind` values used across chestTables, dailyCalendar and streakMilestones:
+//   currency  -> adds to a DATA.currencies balance
+//   booster   -> a DATA.boosters inventory item
+//   buff      -> a DATA.buffs entry (temporary buff)
+//   upgrade   -> a DATA.upgrades entry
+//   permanent -> writes to meta.permanentBonuses (the Golden Burger's +100%
+//                global production that survives prestige) - it is NOT a
+//                currency balance and must never be added to one. A later
+//                systems layer consumes permanent rewards.
 Object.assign(DATA, {
   // 13 boosters
   boosters: [
@@ -235,7 +245,7 @@ Object.assign(DATA, {
     { day: 27, rewards: [{ kind: 'currency', id: 'clout', amount: 100 }] },
     { day: 28, rewards: [{ kind: 'currency', id: 'spice', amount: 500 }] },
     { day: 29, rewards: [{ kind: 'booster', id: 'the-accountant-is-away', amount: 1 }] },
-    { day: 30, rewards: [{ kind: 'currency', id: 'golden-burger', amount: 1 }] }
+    { day: 30, rewards: [{ kind: 'permanent', id: 'golden-burger', amount: 1 }] }
   ],
 
   // streak milestones - 7 entries
@@ -243,7 +253,7 @@ Object.assign(DATA, {
     { day: 3, rewards: [{ kind: 'currency', id: 'grease', amount: 250 }], label: 'Getting Started' },
     { day: 7, rewards: [{ kind: 'booster', id: 'warm-hands', amount: 1 }], label: 'One Week Streak' },
     { day: 14, rewards: [{ kind: 'booster', id: 'double-time', amount: 1 }], label: 'Two Week Streak' },
-    { day: 30, rewards: [{ kind: 'currency', id: 'golden-burger', amount: 1 }], label: 'One Month Streak' },
+    { day: 30, rewards: [{ kind: 'permanent', id: 'golden-burger', amount: 1 }], label: 'One Month Streak' },
     { day: 50, rewards: [{ kind: 'booster', id: 'ocean-mode', amount: 1 }], label: 'Fifty Day Streak' },
     { day: 100, rewards: [{ kind: 'booster', id: 'the-accountant-is-away', amount: 1 }], label: 'Hundred Day Streak' },
     { day: 365, rewards: [{ kind: 'booster', id: 'eukaryotic', amount: 1 }], label: 'Year Streak' }
