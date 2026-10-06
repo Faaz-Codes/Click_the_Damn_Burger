@@ -1,1 +1,1 @@
-["BUILD_INFO", "BigNum", "CONFIG", "DATA", "fmt", "rng", "rngPick", "rngWeighted", "rngInt", "dkey", "parseDateKey", "daysBetween", "makeStore", "Emitter", "Pool"]
+["BUILD_INFO", "BigNum", "CONFIG", "DATA", "fmt", "rng", "rngPick", "rngWeighted", "rngInt", "dkey", "parseDateKey", "daysBetween", "makeStore", "Emitter", "Pool", "validateTables"]
